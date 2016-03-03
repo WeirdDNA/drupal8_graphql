@@ -1,0 +1,9 @@
+{
+    "name": "drupal/graphql_api",
+    "description": "GraphQL Module for Drupal 8 and Relay",
+    "type": "drupal-module",
+    "license": "GPL-2.0+",
+    "require": {
+      "webonyx/graphql-php": "0.5.6",
+    },
+}

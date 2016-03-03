@@ -1,0 +1,6 @@
+name: GraphQL API
+description: GraphQL Web Service for Drupal 8 and Relay
+package: Web services
+
+type: module
+core: 8.x

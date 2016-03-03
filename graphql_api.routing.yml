@@ -1,0 +1,28 @@
+graphql.content:
+  path: '/graphql'
+  defaults:
+    _controller: '\Drupal\graphql_api\Controller\GraphqlController::content'
+    _title: 'GraphQL EndPoint'
+  requirements:
+    _permission: 'access content'
+graphql.shorthand:
+  path: '/graphql_shorthand'
+  defaults:
+    _controller: '\Drupal\graphql_api\Controller\GraphqlController::shorthand'
+    _title: 'GraphQL Shorthand'
+  requirements:
+    _permission: 'access content'
+graphql.graphiql:
+  path: '/graphiql'
+  defaults:
+    _controller: '\Drupal\graphql_api\Controller\GraphqlController::graphiql'
+    _title: 'GraphiQL Client'
+  requirements:
+    _permission: 'access content'
+graphql.schema:
+  path: '/graphql_schema'
+  defaults:
+    _controller: '\Drupal\graphql_api\Controller\GraphqlController::schema'
+    _title: 'GraphQL Schema JSON'
+  requirements:
+    _permission: 'access content'

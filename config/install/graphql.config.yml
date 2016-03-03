@@ -1,0 +1,26 @@
+node:
+  article:
+    query_name: 'article'
+    type_name: 'Article'
+    plural_name: 'articles'
+    connections: 'DIRECT'
+    fields:
+      title: 'headline'
+      body: 'copy'
+  page:
+    query_name: 'page'
+    type_name: 'Page'
+    plural_name: 'pages'
+    connections: 'DIRECT'
+    fields:
+      title: 'title'
+      body: 'body'
+user:
+  user:
+    query_name: 'user'
+    type_name: 'User'
+    plural_name: 'users'
+    connections: 'DIRECT'
+    resolver_class: '\Drupal\graphql_api\Sample\UserResolver'
+    fields:
+      name: 'name'
