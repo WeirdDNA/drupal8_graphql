@@ -43,6 +43,14 @@ class Parser {
     }
     return $type_dictionary;
   }
+  public static function getTitleFieldName($name_type){
+	$entities =  \Drupal::entityManager()->getAllBundleInfo();
+	$config = \Drupal::config('graphql.config');
+	if (isset($config->get("node")[$name_type]["fields"]["title"])){
+		return $config->get("node")[$name_type]["fields"]["title"];
+	}
+	return false;
+  }
   public static function getFieldDictionary($name_type){
     $entities =  \Drupal::entityManager()->getAllBundleInfo();
     $config = \Drupal::config('graphql.config');
@@ -138,7 +146,7 @@ class Parser {
         $type_name = $type_dictionary[$name];
         $query_name = $query_dictionary[$name];// strtolower(substr($type_name,0,1)) . substr($type_name,1,strlen($type_name));
         $plural_name = $plural_dictionary[$name];
-
+		$title_name_field = Parser::getTitleFieldName($name);
         if (isset($connection_dictionary[$name])){
           if (($connection_dictionary[$name] == "GRAPH") || ($connection_dictionary[$name] == "BOTH")){
             $connection_types .="\ntype $type_name"."Edge {\n\tcursor: String!\n\tnode: $type_name\n}\n";
@@ -173,7 +181,7 @@ class Parser {
           $args = $ops["args"];
 
 
-          $viewer_name .= "\t$plural_name";
+          $viewer_name = "\t$plural_name";
           $viewer_args = array();
           foreach($args as $arg_name=>$arg_type){
             $viewer_args[] = "$arg_name: $arg_type";
@@ -196,7 +204,10 @@ class Parser {
         }
 
 
-        $type_doc .="type $type_name : Node {\n\tid: ID!\n\tname: String!\n";
+        $type_doc .="type $type_name : Node {\n\tid: ID!\n";
+		if ($title_name_field !== false){
+			$type_doc .= "\t$title_name_field: String!\n";
+		}
         foreach($type as $field_name=>$field){
           $field_type=$field->type;
           switch($field->type){
@@ -214,6 +225,8 @@ class Parser {
               break;
             case "image";
             case "list_string":
+			case "string_long":
+			case "string":
             case "text_with_summary":
             case "text":
               $field_type = "String";
@@ -221,7 +234,20 @@ class Parser {
             default:
           }
           $drupal_type = $field_type;
+		  $field_arg_string = "";
           if (isset($type_dictionary[$field_type])){
+			if (isset($resolver_dictionary[$field_type])){
+				$resolver = new $resolver_dictionary[$field_type]();
+				$ops = $resolver->getOperations();
+				$args = $ops["args"];
+				  $field_args = array();
+				  foreach($args as $arg_name=>$arg_type){
+					$field_args[] = "$arg_name: $arg_type";
+				  }
+				  if (count($viewer_args) > 0){
+					  $field_arg_string = "(".implode(",",$field_args).")";
+				  }
+			}
             $field_type = $type_dictionary[$field_type];
           }
           $base_field_type = $field_type;
@@ -236,13 +262,20 @@ class Parser {
           if ($field->isList && ($base_field_type != "String")){
             $connection = "\t$new_name"."Connection(before: String, after: String, first: Int, last: Int): $base_field_type"."Connection\n";
           }
-          $type_doc.= "\t$new_name: $field_type\n";
+          $type_doc.= "\t$new_name$field_arg_string: $field_type\n";
           if (($connection_dictionary[$drupal_type] == "GRAPH") || ($connection_dictionary[$drupal_type] == "BOTH")){
             $type_doc.= $connection;
           };
 
           $connection = "";
         }
+		if (isset($resolver_dictionary[$name])){
+			$resolver = new $resolver_dictionary[$name]();
+			$ops = $resolver->getOperations();
+			foreach($ops["customFields"] as $field_name => $field_definition){
+				$type_doc.= "\t$field_name: $field_definition\n";
+			}
+		}
         $type_doc .="}\n";
       }
       $page_info = "type PageInfo {\n\thasNextPage: Boolean!\n\thasPreviousPage: Boolean!\n\tstartCursor: String\n\tendCursor: String\n}\n";
@@ -374,8 +407,6 @@ class Parser {
   		return $known_types[$typeString];
   	}
   	else{
-  		//PHP closure necessary to look up types that do not exist.
-  		//Probably won't work for self-referencing types.
   		return function() use($typeString){
   			global $global_types;
   			if (isset($global_types[$typeString])){
@@ -497,12 +528,19 @@ class Parser {
   		}
   		$global_types = $known_types;
   	}
+
   	foreach($graph_ql_self_references as $type_name=>$array){
   		foreach($array as $field){
-  			$new_field = Parser::setType($field["definition"],$known_types);
+  			$new_type = Parser::setType($field["definition"],$known_types);
+			$new_config = array(
+				"name"=>$field["field"],
+				"type"=>$new_type
+			);
+			$new_field = FieldDefinition::create($new_config);
   			$known_types[$type_name]->setField($field["field"],$new_field);
   		}
   	}
+	$global_types = $known_types;
   	return $known_types;
   }
 }

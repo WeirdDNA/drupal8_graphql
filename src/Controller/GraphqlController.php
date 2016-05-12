@@ -29,6 +29,7 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
   }
 
   public function content(Request $request) {
+	// ini_set('memory_limit','128M');
     $schema = GraphqlController::getSchema();
     $query = "";
     $request_body = file_get_contents('php://input');
@@ -84,8 +85,8 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
       $is_edge = true;
     }
     if ((get_class($base_class) == "GraphQL\Type\Definition\ObjectType")&&(!$is_edge)){
-
-      if ($type->name == "Mutation"){
+	  /*
+      if ($type->name == "Mutation"){ //no such thing as $type
         $field->resolveFn = function($root, $args, $resolveInfo){
 
           $resolver_dictionary = Parser::getTypeDictionary("resolver_class");
@@ -107,6 +108,7 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
 
       }
       else{
+	*/
         $field->resolveFn = function($root,$args,$resolveInfo){
           $result = GraphqlController::resolveAny($resolveInfo->returnType, $root, $args, $resolveInfo);
           if (isset($result["_list"])){
@@ -122,7 +124,7 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
           }
           return $result;
         };
-      }
+      //}
 
     }
     return $field;
@@ -187,26 +189,48 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
     }
     return new Schema($types["Query"], $types['Mutation']);
   }
-  private static function graphNodes($root,$args,$resolveInfo){
+  public static function graphNodes($root,$args,$resolveInfo){
     $field_dictionary = Parser::getFieldDictionary();
     $type_dictionary = Parser::getTypeDictionary("type_name");
     $cardinality = "single";
     $type = "";
     $limit_to_ids = array();
     $limit_to_entity = "";
+	$resolveTypeName = "";
     if(get_class($resolveInfo->returnType) == "GraphQL\Type\Definition\ObjectType"){
       $resolveTypeName = $resolveInfo->returnType->name;
-      foreach($type_dictionary as $key=>$value){
-        if ($value == $resolveTypeName){
-          $type = $key;
-        }
-      }
+      
     }
-    else{
-      die("not handling plurals yet");
+    elseif(get_class($resolveInfo->returnType) == "GraphQL\Type\Definition\ListOfType"){
+		$cardinality = "multiple";
+		$wrappedType = $resolveInfo->returnType->getWrappedType(true);
+		$resolveTypeName = $wrappedType->name;
     }
+	else{
+		die("not handling ".get_class($resolveInfo->returnType)." yet");
+	}
+	foreach($type_dictionary as $key=>$value){
+		if ($value == $resolveTypeName){
+			$type = $key;
+		}
+	}
+	if ($type == ""){
+		if($resolveTypeName == "Viewer"){
+			return array();
+		}
+		else{
+			die("could not find a type for $resolveTypeName.");
+		}
+		
+	}
     if (isset($root)){
-
+		$parent_type_name = $resolveInfo->parentType->name;
+		if ($parent_type_name == "Viewer"){
+			unset($root);//temporary solution
+		}
+	}
+	
+	if (isset($root)){
       $parent_type_name = $resolveInfo->parentType->name;
       $entities = \Drupal::entityManager()->getAllBundleInfo();
       $config = \Drupal::config('graphql.config');
@@ -242,14 +266,27 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
       $limit_to_type = $entity_type;
     }
 
-    if ($limit_to_entity == ""){
-      $query = \Drupal::entityQuery('node')
-      ->condition('type', $type)->condition('status',1);
-      $nids = $query->execute();
-    }
-    else{
-      $nids = $limit_to_ids;
-    }
+	if ($limit_to_entity == ""){
+	  $query = \Drupal::entityQuery('node')
+	  ->condition('type', $type)->condition('status',1);
+	  $nids = $query->execute();
+	}
+	else{
+	  $nids = $limit_to_ids;//nids belonging to parent
+	}
+	
+	if (isset($args["ids"])){
+		$nids_2 = $args["ids"];//nids filtered by conditions
+		$intersecting_nids = array();
+		foreach($nids as $nid_1){
+			foreach($nids_2 as $nid_2){
+				if (intval($nid_1) == intval($nid_2)){
+					$intersecting_nids[] = $nid_1;
+				}
+			}
+		}
+		$nids = $intersecting_nids;
+	}
 
     $nodes = entity_load_multiple('node',$nids);
     foreach($nodes as $node){
@@ -266,10 +303,15 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
       }
       $results[] = $result;
     }
-    return $result;
+	if($cardinality == "single"){
+		return $result;
+	}
+    return $results;
+	
   }
   private static function getData($name, $root, $args, $resolveInfo){
     $type_dictionary = Parser::getTypeDictionary("type_name");
+	$resolver_dictionary = Parser::getTypeDictionary("resolver_class");
     $field_dictionary = Parser::getFieldDictionary();
     $type = "";
     foreach($type_dictionary as $type_name=>$graph_name){
@@ -277,20 +319,27 @@ class GraphqlController extends \Drupal\Core\Controller\ControllerBase {
         $type = $type_name;
       }
     }
-
+	
     $graph_connection = false;
     if (substr($type,strlen($type)-10,10) == "Connection"){
       $graph_connection = true;
       $type = substr($type,0,strlen($type)-10);
     }
-    $results = GraphqlController::graphNodes($root,$args,$resolveInfo);
+	if (isset($resolver_dictionary[$type])){
+		$resolver = new $resolver_dictionary[$type]();
+		$results = $resolver->mainQuery($root,$args,$resolveInfo);
+	}
+	else{
+		$results = GraphqlController::graphNodes($root,$args,$resolveInfo);
+	}
+    
 
-
+	//print_r($results);
     if ($graph_connection){
   		//return graph_edges_to_return($result, $args);
   	}
     if ($name == "Viewer"){
-      return array();
+		return array();
     }
     return $results;
   }

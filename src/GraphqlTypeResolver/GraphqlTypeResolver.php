@@ -6,11 +6,12 @@
 
 namespace Drupal\graphql_api\GraphqlTypeResolver;
 class GraphqlTypeResolver{
-  protected $args, $mutations;
+  protected $args, $mutations, $customFields;
   public function getOperations(){
     return array(
       "args"=>$this->args,
-      "mutations"=>$this->mutations
+      "mutations"=>$this->mutations,
+	  "customFields"=>$this->customFields,
     );
   }
 }
